@@ -1,8 +1,8 @@
 # 3D-Printed Homograft Aortic Root Model
 
-Author: [Mikulyak Cofya]  
+Author: Mikulyak Sofya  
 Goal: MIT/Peking / Tsinghua Admissions — Science and Technology Portfolio  
-Repository: [(https://github.com/Mikylya/homograft-aortic-root)]
+Repository: (https://github.com/Mikylya/homograft-aortic-root)
 
 
 # Overview
@@ -149,10 +149,10 @@ No pulsatile flow: Current test uses steady pressure; future: pulse duplicator
 MIT License - free for academic and research use.
 
  **Contact**
-Author: [Mikulyak Sofya]
-Email: [micksof@ya.ru]
-GitHub: [(https://github.com/Mikylya/homograft-aortic-root)]
-LinkedIn: [https://github.com/Mikylya]
+Author: Mikulyak Sofya
+Email: micksof@ya.ru
+GitHub: (https://github.com/Mikylya/homograft-aortic-root)
+LinkedIn: https://github.com/Mikylya
 
  *Acknowledgments*
 3D Slicer community for open-source medical imaging tools
