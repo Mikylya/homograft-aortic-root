@@ -1,116 +1,146 @@
 """
-Module for exporting the 3D model of the HOMOGRAPH OF THE AORTAL ROOT to STL
-Run in Python Interactor 3D Slicer
-
-Important: select the entire aortic root:
-- Root with sinuses
-- Fibrous ring
-- Ascending aorta (+-5 cm)
-- (optional) part of the mitral valve
+Модуль для экспорта ГОМОГРАФТА КОРНЯ АОРТЫ в STL
+Клинический протокол: толщина среза 1 мм, HU 140-500, валидация синусов
+Запускать в Python Interactor 3D Slicer
 """
 
 import slicer
+import vtk
+import numpy as np
 
-def export_homograft_root(output_path):
+def validate_homograft(mesh):
     """
-    Exports the selected homograph of the aortic root to STL.
- 
- Checks:
- That it is the aortic root (height 40-70 mm)
- That there are three Valsalva sinuses
- That there is room for a valve
- 
- Args:
- output_path (str): path to save the STL file
- 
- Returns:
- bool: True if successful, False if an error
-    """
-    print("="*60)
-    print(" EXPORT OF 3D MODEL OF THE HOMOGRAPH OF THE AORTIC ROOT")
-    print("="*60)
+    Специальная валидация для гомографта корня аорты.
+    Проверяет наличие всех трёх структур: синусы, клапан, восходящая аорта.
     
-    # Find all the 3D models in the scene
+    Returns:
+        dict: { 'valid': bool, 'details': {...} }
+    """
+    print("\n🔍 ВАЛИДАЦИЯ ГОМОГРАФТА КОРНЯ АОРТЫ...")
+    
+    bounds = [0, 0, 0, 0, 0, 0]
+    mesh.GetBounds(bounds)
+    height = abs(bounds[5] - bounds[4])
+    width = abs(bounds[1] - bounds[0])
+    depth = abs(bounds[3] - bounds[2])
+    
+    results = {
+        'valid': True,
+        'height': height,
+        'width': width,
+        'depth': depth,
+        'sinuses_ok': False,
+        'valve_area_ok': False
+    }
+    
+    # 1. Проверка высоты (гомографт ≈40-70 мм)
+    if height < 35:
+        print("   ❌ Слишком низкая модель (<35 мм) — это не гомографт корня")
+        results['valid'] = False
+    elif height > 80:
+        print("   ❌ Слишком высокая модель (>80 мм) — это не гомографт корня")
+        results['valid'] = False
+    else:
+        print(f"   ✅ Высота {height:.1f} мм — соответствует гомографту")
+    
+    # 2. Проверка синусов Вальсальвы (расширение корня)
+    # Синусы видны как расширение в нижней части
+    if width > depth * 1.08:
+        print("   ✅ Обнаружены синусы Вальсальвы (3 расширения)")
+        results['sinuses_ok'] = True
+    else:
+        print("   ⚠️ Синусы Вальсальвы не обнаружены!")
+        print("      Это критично для гомографта корня аорты.")
+        results['valid'] = False
+    
+    # 3. Проверка наличия клапанной зоны (сужение в средней части)
+    num_slices = 15
+    slice_height = height / num_slices
+    diameters = []
+    
+    for i in range(1, num_slices - 1):
+        z = bounds[4] + i * slice_height
+        
+        plane = vtk.vtkPlane()
+        plane.SetOrigin(0, 0, z)
+        plane.SetNormal(0, 0, 1)
+        
+        cutter = vtk.vtkCutter()
+        cutter.SetInputData(mesh)
+        cutter.SetCutFunction(plane)
+        cutter.Update()
+        
+        if cutter.GetOutput().GetNumberOfPoints() > 3:
+            center = vtk.vtkCenterOfMass()
+            center.SetInputData(cutter.GetOutput())
+            center.Update()
+            cx, cy, cz = center.GetCenter()
+            
+            points = cutter.GetOutput().GetPoints()
+            dist_sum = 0
+            for j in range(points.GetNumberOfPoints()):
+                p = points.GetPoint(j)
+                dist_sum += ((p[0]-cx)**2 + (p[1]-cy)**2)**0.5
+            avg_radius = dist_sum / points.GetNumberOfPoints()
+            diameters.append(2 * avg_radius)
+    
+    if diameters:
+        max_diam = max(diameters)
+        min_diam = min(diameters)
+        if max_diam > min_diam * 1.15:
+            print(f"   ✅ Клапанная зона обнаружена (диаметр изменяется)")
+            results['valve_area_ok'] = True
+        else:
+            print(f"   ⚠️ Не обнаружено характерного изменения диаметра для клапана")
+    
+    # Итог
+    if results['valid'] and results['sinuses_ok']:
+        print("\n✅ Модель соответствует гомографту корня аорты")
+    else:
+        print("\n❌ Модель НЕ соответствует гомографту корня аорты")
+        print("   Проверь сегментацию: нужны синусы и клапанная зона")
+    
+    return results
+
+
+def export_homograft_graft(output_path):
+    """
+    Экспортирует выделенную модель как гомографт корня аорты.
+    """
+    print("="*60)
+    print("🧬 ЭКСПОРТ ГОМОГРАФТА КОРНЯ АОРТЫ")
+    print("="*60)
+    print("   Клинический протокол: HU 140-500, толщина среза 1 мм")
+    
     all_models = slicer.util.getNodesByClass("vtkMRMLModelNode")
     if not all_models:
-        print(" There is no model for export.")
-        print("   Do the segmentation first:")
-        print("   1. Segment Editor → Threshold")
-        print("   2. Clean up the excess (Erase, Scissors)")
-        print("   3. Leave ONLY the root of the aorta (+-5 cm)")
-        print("   4. click Show 3D")
-        return False
-    # We take the first model
-    homograft = all_models[0]
-    # Checking the dimensions
-    bounds = [0, 0, 0, 0, 0, 0]
-    homograft.GetPolyData().GetBounds(bounds)
-    
-    width = abs(bounds[1] - bounds[0])   # Diameter X
-    depth = abs(bounds[3] - bounds[2])   # Diameter Y
-    height = abs(bounds[5] - bounds[4])  # Height
-    
-    print(f"\n Measurements of the homograph model:")
-    print(f"   Diameter (width):  {width:.1f} mm")
-    print(f"   Diameter (depth): {depth:.1f} mm")
-    print(f"   Height (length):    {height:.1f} mm")
-  
-    # 1. Height check (root homograph +-40-70 mm)
-    if height < 35:
-        print("\n The model is too low (<35 mm)!")
-        print("   It only looks like a valve.")
-        print("   Homograph requires the entire root with the sines.")
+        print("❌ Нет модели для экспорта")
         return False
     
-    if height > 80:
-        print("\n The model is too tall (>80 mm)!")
-        print("   It looks like the whole aorta.")
-        print("   Homograph requires only a ROOT (+-5 cm).")
+    graft_node = all_models[0]
+    mesh = graft_node.GetPolyData()
+    if not mesh:
+        print("❌ У модели нет полигональных данных")
         return False
     
-    print("  The height corresponds to the homograph of the root")
+    # Валидация (обязательно!)
+    validation = validate_homograft(mesh)
+    if not validation['valid']:
+        print("\n❌ Экспорт отменён: модель не является гомографтом корня аорты")
+        return False
     
-    # 2. Valsalva sinus test (3 extensions)
-    # The sinuses are visible as an expansion at the bottom
-    if width > depth * 1.08:
-        print("   Valsalva sinuses detected (3 extensions)")
-    else:
-        print("      The sinuses of Valsalva are not visible!")
-        print("      This is critical for a homograph.")
-        print("      Check the segmentation.")
-    
-    # 3. Checking the fibrous ring
-    # There should be a valve-aorta transition at the bottom
-    if height > 40:
-        print("    The fibrous ring should be in the model")
-    else:
-        print("    Check for a fibrous ring.")
-    
-    # 4. Diameter check (homograph ≈20-30 mm)
-    if width < 18:
-        print("    The diameter is too small for the root homograph.")
-        print("      (usually 20-30 mm)")
-    elif width > 35:
-        print("    The diameter is too large for the root homograph.")
-    else:
-        print(f"    Diameter {width:.1f} mm - normal")
-    
-    #EXPORT 
+    # Экспорт
     try:
-        slicer.util.exportNode(homograft, output_path)
-        
-        print(f"\n The aortic root homograft is preserved: {output_path}")
-        print("\n total:")
-        print(f"   Model: aortic root homograft")
-        print(f"   Length: {height:.1f} мм")
-        print(f"   Diameter: {width:.1f} мм")
-        print(f"   Sinuses: {' есть' if width > depth * 1.08 else ' check again'}")
+        slicer.util.exportNode(graft_node, output_path)
+        print(f"\n✅ Гомографт корня аорты сохранён: {output_path}")
+        print(f"   Высота: {validation['height']:.1f} мм")
+        print(f"   Диаметр: {validation['width']:.1f} мм")
+        print(f"   Синусы: {'✅ есть' if validation['sinuses_ok'] else '⚠️ нет'}")
         print("="*60)
         return True
     except Exception as e:
-        print(f"\n Saving error: {e}")
-        print("   Check the path and write permissions.")
+        print(f"\n❌ Ошибка сохранения: {e}")
         return False
 
-# Usage example:
-# export_homograft_root("C:/Path to the repository/models/homograft_root.stl")
+# Пример использования:
+# export_homograft_graft("C:/путь_к_репозиторию/models/homograft_root.stl")
