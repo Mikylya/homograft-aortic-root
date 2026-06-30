@@ -44,7 +44,6 @@ def validate_homograft(mesh):
         print(f"   ✅ Высота {height:.1f} мм — соответствует гомографту")
     
     # 2. Проверка синусов Вальсальвы (расширение корня)
-    # Синусы видны как расширение в нижней части
     if width > depth * 1.08:
         print("   ✅ Обнаружены синусы Вальсальвы (3 расширения)")
         results['sinuses_ok'] = True
@@ -53,7 +52,7 @@ def validate_homograft(mesh):
         print("      Это критично для гомографта корня аорты.")
         results['valid'] = False
     
-    # 3. Проверка наличия клапанной зоны (сужение в средней части)
+    # 3. Проверка наличия клапанной зоны
     num_slices = 15
     slice_height = height / num_slices
     diameters = []
@@ -93,12 +92,10 @@ def validate_homograft(mesh):
         else:
             print(f"   ⚠️ Не обнаружено характерного изменения диаметра для клапана")
     
-    # Итог
     if results['valid'] and results['sinuses_ok']:
         print("\n✅ Модель соответствует гомографту корня аорты")
     else:
         print("\n❌ Модель НЕ соответствует гомографту корня аорты")
-        print("   Проверь сегментацию: нужны синусы и клапанная зона")
     
     return results
 
@@ -123,13 +120,11 @@ def export_homograft_graft(output_path):
         print("❌ У модели нет полигональных данных")
         return False
     
-    # Валидация (обязательно!)
     validation = validate_homograft(mesh)
     if not validation['valid']:
         print("\n❌ Экспорт отменён: модель не является гомографтом корня аорты")
         return False
     
-    # Экспорт
     try:
         slicer.util.exportNode(graft_node, output_path)
         print(f"\n✅ Гомографт корня аорты сохранён: {output_path}")
