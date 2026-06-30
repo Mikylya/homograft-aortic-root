@@ -1,5 +1,6 @@
 """
 Модуль для загрузки DICOM-данных в 3D Slicer
+Клинический протокол: толщина среза 1 мм, HU 140-500
 Запускать в Python Interactor 3D Slicer
 """
 
@@ -20,6 +21,7 @@ def load_dicom(folder_path):
     print("🔬 ЗАГРУЗКА DICOM-ДАННЫХ")
     print("="*60)
     print(f"   Папка: {folder_path}")
+    print(f"   Клинический протокол: толщина среза 1.0 мм, HU 140-500")
     
     try:
         # Загружаем данные
@@ -45,12 +47,15 @@ def load_dicom(folder_path):
         print(f"\n✅ Загружено: {volume_node.GetName()}")
         print(f"📏 Толщина среза: {slice_thickness:.2f} мм")
         
-        if slice_thickness > 1.5:
+        # Проверка по клиническому протоколу
+        if slice_thickness == 1.0:
+            print("✅ Отлично! Толщина среза 1.0 мм — соответствует клиническому протоколу.")
+        elif slice_thickness > 1.5:
             print("⚠️ ВНИМАНИЕ: толстые срезы (>1.5 мм).")
-            print("   Модель может быть неточной.")
-            print("   Для восходящей аорты с клапаном нужны срезы ≤ 1 мм.")
+            print("   Клинический протокол: 1.0 мм. Модель может быть неточной.")
         else:
-            print("✅ Качество хорошее. Можно строить модель.")
+            print(f"   Толщина среза {slice_thickness:.2f} мм — отличается от клинического протокола (1.0 мм).")
+            print("   Проверьте настройки сканирования.")
         
         # Проверка наличия контраста (анализ HU в центре среза)
         image_data = volume_node.GetImageData()
@@ -59,11 +64,12 @@ def load_dicom(folder_path):
             center_voxel = image_data.GetScalarComponentAsDouble(
                 dims[0]//2, dims[1]//2, dims[2]//2, 0
             )
-            if center_voxel > 100:
-                print("   ✅ Похоже, есть контраст (HU > 100) — хорошо для аорты")
+            # Клинический диапазон HU 140-500
+            if 140 <= center_voxel <= 500:
+                print(f"   ✅ HU в центре: {center_voxel:.1f} — в клиническом диапазоне (140-500)")
             else:
-                print("   ⚠️ Низкий HU в центре. Возможно, нет контраста.")
-                print("      Для модели аорты рекомендуется КТ с контрастом.")
+                print(f"   ⚠️ HU в центре: {center_voxel:.1f} — вне клинического диапазона (140-500)")
+                print("      Возможно, это КТ без контраста или другой протокол.")
         
         print("="*60)
         return volume_node
